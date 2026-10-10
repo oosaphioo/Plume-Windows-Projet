@@ -1,0 +1,18 @@
+Plume 0.1.0
+
+Le code propre à Plume est fourni sous licence MIT (voir LICENSE).
+L’application utilise les composants tiers suivants :
+- Qt / PySide6 / Shiboken6 : LGPL v3 (ou licence commerciale), Qt Company.
+  Sources et informations de licence : https://www.qt.io/licensing/
+  https://download.qt.io/official_releases/QtForPython/
+- python-docx : licence MIT, https://github.com/python-openxml/python-docx
+- lxml : licence BSD, https://lxml.de/
+- Python : licence PSF, https://docs.python.org/3/license.html
+- PyInstaller : GPL avec exception de distribution du bootloader,
+  https://pyinstaller.org/en/stable/license.html
+
+La version distribuée doit conserver les licences accompagnant ces composants.
+PyInstaller utilise un dossier de bibliothèques dynamiques : gardez les fichiers
+du dossier _internal. Ce projet inclut les sources de Plume, ainsi que les scripts
+permettant de reconstruire l’application avec vos versions compatibles de Qt.
+Aucun abonnement, aucun compte et aucun service cloud ne sont utilisés par Plume.
