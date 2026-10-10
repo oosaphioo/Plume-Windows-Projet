@@ -1,7 +1,7 @@
 [Setup]
 AppId={{550D5562-DAE5-4B1A-AAF1-9BB713AEAC22}
 AppName=Plume
-AppVersion=0.1.0
+AppVersion=0.2.0
 AppPublisher=Plume
 DefaultDirName={localappdata}\Programs\Plume
 DefaultGroupName=Plume

@@ -1,4 +1,4 @@
-Plume 0.1.0
+Plume 0.2.0
 
 Le code propre à Plume est fourni sous licence MIT (voir LICENSE).
 L’application utilise les composants tiers suivants :

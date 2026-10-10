@@ -1,0 +1,60 @@
+name: Construire Plume pour Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements.txt pyinstaller==6.22.0
+      - name: Tester l’éditeur et les formats
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -v
+      - name: Construire l’application
+        run: python -m PyInstaller --noconfirm --clean --windowed --onedir --name Plume --collect-data docx main.py
+      - name: Vérifier le démarrage de la version compilée
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $process = Start-Process -FilePath "dist/Plume/Plume.exe" -ArgumentList "--smoke-test" -PassThru
+          if (-not $process.WaitForExit(30000)) {
+            $process.Kill()
+            throw "Le test de démarrage a dépassé le délai"
+          }
+          if ($process.ExitCode -ne 0) { throw "Le démarrage de Plume a échoué" }
+      - name: Préparer Inno Setup
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $compiler)) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Installation d’Inno Setup impossible" }
+          }
+          if (-not (Test-Path $compiler)) { throw "Compilateur Inno Setup introuvable" }
+          & $compiler installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Compilation de l’installateur impossible" }
+      - name: Mettre l’installateur à disposition
+        uses: actions/upload-artifact@v4
+        with:
+          name: Plume-Installation-Windows
+          path: output/Plume-Installation-Windows.exe
+          if-no-files-found: error
+          retention-days: 30
+      - name: Mettre la version portable à disposition
+        uses: actions/upload-artifact@v4
+        with:
+          name: Plume-Portable-Windows
+          path: dist/Plume/
+          if-no-files-found: error
+          retention-days: 30

@@ -2,18 +2,49 @@ import base64
 import re
 import sys
 from pathlib import Path
-from PySide6.QtCore import Qt, QTimer, QStandardPaths, QSettings, QSizeF, QMarginsF
+from PySide6.QtCore import Qt, QTimer, QStandardPaths, QSettings, QSizeF, QMarginsF, QSize, QByteArray
 from PySide6.QtGui import (QAction, QKeySequence, QFont, QTextCharFormat, QColor,
                           QTextCursor, QTextListFormat, QTextTableFormat, QTextImageFormat,
-                          QImage, QPageSize, QPageLayout, QTextDocument)
+                          QImage, QPageSize, QPageLayout, QTextDocument, QIcon, QPixmap, QPainter, QPalette)
 from PySide6.QtWidgets import (QApplication, QMainWindow, QTextEdit, QFileDialog,
     QMessageBox, QToolBar, QFontComboBox, QComboBox, QSpinBox, QColorDialog,
     QDockWidget, QListWidget, QInputDialog, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLineEdit, QLabel, QDialog, QDialogButtonBox)
+    QPushButton, QLineEdit, QLabel, QDialog, QDialogButtonBox, QToolButton, QSizePolicy, QGraphicsDropShadowEffect)
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog, QPrintPreviewDialog
 from storage import save_project, load_project, import_docx, export_docx, atomic_write
 
 APP = 'Plume'
+
+# Small local vector icons; no image downloads or icon font needed.
+ICON_PATHS = {
+    'feather': '<path d="M20 3c-7-2-15 3-14 11l4 3c8 0 12-7 10-14Z"/><path d="M3 21 16 8M7 17h5M11 13h5"/>',
+    'folder': '<path d="M3 6h6l2 2h10v12H3Z"/>',
+    'save': '<path d="M4 3h13l3 3v15H4Z"/><path d="M8 3v6h8V3M8 21v-8h8v8"/>',
+    'export': '<path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/>',
+    'moon': '<path d="M20 14A9 9 0 0 1 10 3a9 9 0 1 0 10 11Z"/>',
+    'focus': '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+    'plus': '<path d="M12 5v14M5 12h14"/>',
+    'up': '<path d="m6 14 6-6 6 6"/>',
+    'down': '<path d="m6 10 6 6 6-6"/>',
+    'left': '<path d="M4 5h16M4 10h10M4 15h16M4 20h10"/>',
+    'center': '<path d="M4 5h16M7 10h10M4 15h16M7 20h10"/>',
+    'right': '<path d="M4 5h16M10 10h10M4 15h16M10 20h10"/>',
+    'justify': '<path d="M4 5h16M4 10h16M4 15h16M4 20h16"/>',
+    'bullets': '<path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
+    'numbers': '<path d="M10 6h11M10 12h11M10 18h11M3 4h2v5M3 13q3-3 3 0l-3 4h3"/>',
+    'image': '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="2"/><path d="m4 19 6-7 4 4 3-4 4 5"/>',
+    'table': '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
+    'link': '<path d="m9 15 6-6M8 16l-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0) scale(.9)"/>',
+    'color': '<path d="m5 17 7-14 7 14M8 12h8M4 21h16"/>',
+}
+
+def vector_icon(name, color='#6856b3'):
+    from PySide6.QtSvg import QSvgRenderer
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="{color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">{ICON_PATHS[name]}</g></svg>'
+    pix = QPixmap(48,48); pix.fill(Qt.transparent)
+    painter = QPainter(pix); QSvgRenderer(QByteArray(svg.encode())).render(painter); painter.end()
+    return QIcon(pix)
+
 
 
 class Editor(QTextEdit):
@@ -52,10 +83,19 @@ class Window(QMainWindow):
         self.chapters = [{'title':'Document', 'html':'<p></p>'}]
         self.editor = Editor(); self.editor.setAcceptRichText(True)
         self.editor.setFont(QFont('Calibri', 12))
-        self.editor.document().setDocumentMargin(60)
-        self.editor.setLineWrapMode(QTextEdit.FixedPixelWidth)
-        self.editor.setLineWrapColumnOrWidth(675)
-        self.setCentralWidget(self.editor)
+        self.editor.document().setDocumentMargin(54)
+        self.editor.setObjectName('paper')
+        self.editor.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.editor.setMaximumWidth(820)
+        self.editor.setMinimumWidth(380)
+        self.canvas = QWidget(); self.canvas.setObjectName('canvas')
+        canvas_layout = QVBoxLayout(self.canvas); canvas_layout.setContentsMargins(28, 22, 28, 28); canvas_layout.setSpacing(16)
+        self.breadcrumb = QLabel('DOCUMENT  /  Document'); self.breadcrumb.setObjectName('breadcrumb')
+        canvas_layout.addWidget(self.breadcrumb)
+        paper_row = QHBoxLayout(); paper_row.setSpacing(0); paper_row.addStretch(1); paper_row.addWidget(self.editor, 10); paper_row.addStretch(1)
+        canvas_layout.addLayout(paper_row, 1)
+        shadow = QGraphicsDropShadowEffect(self.editor); shadow.setBlurRadius(28); shadow.setOffset(0,6); shadow.setColor(QColor(30,25,55,24)); self.editor.setGraphicsEffect(shadow)
+        self.setCentralWidget(self.canvas)
         self.editor.textChanged.connect(self.changed)
         self.editor.cursorPositionChanged.connect(self.sync_format)
         self.build_chapters(); self.build_toolbar(); self.build_menus(); self.apply_theme()
@@ -81,48 +121,93 @@ class Window(QMainWindow):
             edit.addAction(self.action(label, fn, key))
         view = self.menuBar().addMenu('Affichage')
         view.addAction(self.dock.toggleViewAction())
-        view.addAction(self.action('Mode concentration', self.focus_mode, 'F11', True))
+        self.concentration.setShortcut(QKeySequence('F11')); view.addAction(self.concentration)
         view.addAction(self.action('Thème clair / sombre', self.toggle_theme))
         view.addAction(self.action('Agrandir le texte', lambda:self.editor.zoomIn(1), 'Ctrl++'))
         view.addAction(self.action('Réduire le texte', lambda:self.editor.zoomOut(1), 'Ctrl+-'))
         help_menu = self.menuBar().addMenu('Aide')
         help_menu.addAction(self.action('À propos de Plume', lambda:QMessageBox.information(self, APP,
-            'Plume 0.1 — Écrire à son rythme.\n\nEnregistrez en .plume pour conserver les chapitres et images.\nWord : import/export simplifiés, sans fidélité garantie.\nPDF et impression : pages A4, marges de 20 mm.\nÉditeur continu : utilisez l’aperçu pour voir les pages.\nPas encore de correcteur orthographique ni d’en-têtes/pieds de page.\nSauvegarde de secours locale toutes les 15 secondes.')))
+            'Plume 0.2 — Écrire à son rythme.\n\nEnregistrez en .plume pour conserver les chapitres et images.\nWord : import/export simplifiés, sans fidélité garantie.\nPDF et impression : pages A4, marges de 20 mm.\nÉditeur continu : utilisez l’aperçu pour voir les pages.\nPas encore de correcteur orthographique ni d’en-têtes/pieds de page.\nSauvegarde de secours locale toutes les 15 secondes.')))
+
+    def tool_button(self, action, icon=None, primary=False, text=True):
+        button = QToolButton(); button.setDefaultAction(action)
+        button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon if text else Qt.ToolButtonIconOnly)
+        button.setIconSize(QSize(18,18)); button.setFocusPolicy(Qt.NoFocus)
+        if icon:
+            action.setProperty('iconName',icon); action.setProperty('primaryIcon',primary)
+            action.setIcon(vector_icon(icon, '#ffffff' if primary else '#6856b3'))
+        if primary: button.setProperty('primary', True)
+        if not text: button.setObjectName('iconButton'); button.setFixedSize(34,34)
+        return button
+
+    @staticmethod
+    def divider():
+        line = QWidget(); line.setObjectName('divider'); line.setFixedWidth(1); line.setFixedHeight(26)
+        return line
 
     def build_toolbar(self):
-        self.tools = QToolBar('Mise en forme'); self.tools.setMovable(False); self.addToolBar(self.tools)
-        for label, fn in [('Ouvrir', self.open), ('Enregistrer', self.save), ('PDF', self.pdf)]:
-            self.tools.addAction(self.action(label, fn))
-        self.tools.addSeparator()
-        self.styles = QComboBox(); self.styles.addItems(['Texte', 'Titre 1', 'Titre 2', 'Titre 3'])
-        self.styles.activated.connect(self.heading); self.tools.addWidget(self.styles)
-        self.fonts = QFontComboBox(); self.fonts.setMaximumWidth(170)
-        self.fonts.currentFontChanged.connect(lambda f:self.format(font=f.family())); self.tools.addWidget(self.fonts)
-        self.size = QSpinBox(); self.size.setRange(6, 96); self.size.setValue(12)
-        self.size.valueChanged.connect(lambda n:self.format(size=n)); self.tools.addWidget(self.size)
-        self.bold = self.action('Gras', lambda checked:self.format(bold=checked), 'Ctrl+B', True)
-        self.italic = self.action('Italique', lambda checked:self.format(italic=checked), 'Ctrl+I', True)
-        self.underline = self.action('Souligné', lambda checked:self.format(underline=checked), 'Ctrl+U', True)
-        for a in [self.bold, self.italic, self.underline]: self.tools.addAction(a)
-        self.tools.addAction(self.action('Couleur', self.color))
+        self.tools = QToolBar('Document'); self.tools.setObjectName('header'); self.tools.setMovable(False)
+        self.addToolBar(self.tools)
+        header = QWidget(); header.setObjectName('headerContent'); row = QHBoxLayout(header); row.setContentsMargins(18,6,18,6); row.setSpacing(10)
+        logo = QLabel(); logo.setPixmap(vector_icon('feather').pixmap(30,30)); row.addWidget(logo)
+        brand = QLabel('plume'); brand.setObjectName('brand'); row.addWidget(brand)
+        tagline = QLabel('L’espace de vos mots'); tagline.setObjectName('muted'); row.addWidget(tagline)
+        row.addStretch()
+        for label, fn, icon in [('Ouvrir',self.open,'folder'), ('Enregistrer',self.save,'save'), ('Exporter PDF',self.pdf,'export')]:
+            row.addWidget(self.tool_button(self.action(label,fn), icon, primary=label=='Enregistrer'))
+        row.addWidget(self.divider())
+        row.addWidget(self.tool_button(self.action('Changer de thème', self.toggle_theme), 'moon', text=False))
+        self.concentration = self.action('Mode concentration', self.focus_mode, check=True)
+        row.addWidget(self.tool_button(self.concentration, 'focus', text=False))
+        header.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred); self.tools.addWidget(header)
         self.addToolBarBreak()
-        self.insert_tools = QToolBar('Paragraphes et insertion'); self.insert_tools.setMovable(False); self.addToolBar(self.insert_tools)
-        for label, alignment in [('Gauche', Qt.AlignLeft), ('Centrer', Qt.AlignHCenter), ('Droite', Qt.AlignRight), ('Justifier', Qt.AlignJustify)]:
-            self.insert_tools.addAction(self.action(label, lambda checked=False,a=alignment:self.editor.setAlignment(a)))
-        self.insert_tools.addSeparator()
-        for label, fn in [('Puces', lambda:self.list_style(False)), ('Numéros', lambda:self.list_style(True)), ('Image…', self.image), ('Tableau…', self.table), ('Lien…', self.link)]:
-            self.insert_tools.addAction(self.action(label, fn))
+        self.insert_tools = QToolBar('Mise en forme'); self.insert_tools.setObjectName('ribbon'); self.insert_tools.setMovable(False); self.addToolBar(self.insert_tools)
+        ribbon = QWidget(); layout = QVBoxLayout(ribbon); layout.setContentsMargins(20,8,20,10); layout.setSpacing(6)
+        first = QHBoxLayout(); first.setSpacing(8)
+        caption = QLabel('TEXTE'); caption.setObjectName('sectionLabel'); first.addWidget(caption)
+        self.styles = QComboBox(); self.styles.addItems(['Texte','Titre 1','Titre 2','Titre 3']); self.styles.setFixedWidth(110)
+        self.styles.setAccessibleName('Style de paragraphe'); self.styles.activated.connect(self.heading); first.addWidget(self.styles)
+        self.fonts = QFontComboBox(); self.fonts.setFixedWidth(185); self.fonts.setAccessibleName('Police')
+        self.fonts.currentFontChanged.connect(lambda f:self.format(font=f.family())); first.addWidget(self.fonts)
+        self.size = QSpinBox(); self.size.setRange(6,96); self.size.setValue(12); self.size.setFixedWidth(64); self.size.setAccessibleName('Taille de police')
+        self.size.valueChanged.connect(lambda n:self.format(size=n)); first.addWidget(self.size)
+        first.addWidget(self.divider())
+        self.bold = self.action('B', lambda checked:self.format(bold=checked), 'Ctrl+B', True); self.bold.setToolTip('Gras · Ctrl+B')
+        self.italic = self.action('I', lambda checked:self.format(italic=checked), 'Ctrl+I', True); self.italic.setToolTip('Italique · Ctrl+I')
+        self.underline = self.action('U', lambda checked:self.format(underline=checked), 'Ctrl+U', True); self.underline.setToolTip('Souligné · Ctrl+U')
+        for action, style in [(self.bold,'font-weight:700'),(self.italic,'font-style:italic'),(self.underline,'text-decoration:underline')]:
+            button = self.tool_button(action); button.setFixedSize(34,34); button.setStyleSheet(style); first.addWidget(button)
+        first.addWidget(self.tool_button(self.action('Couleur du texte',self.color),'color',text=False)); first.addStretch()
+        second = QHBoxLayout(); second.setSpacing(8)
+        caption = QLabel('PARAGRAPHE'); caption.setObjectName('sectionLabel'); second.addWidget(caption)
+        for label, alignment, icon in [('Aligner à gauche',Qt.AlignLeft,'left'),('Centrer',Qt.AlignHCenter,'center'),('Aligner à droite',Qt.AlignRight,'right'),('Justifier',Qt.AlignJustify,'justify')]:
+            second.addWidget(self.tool_button(self.action(label,lambda checked=False,a=alignment:self.editor.setAlignment(a)),icon,text=False))
+        second.addWidget(self.divider())
+        for label, fn, icon in [('Liste à puces',lambda:self.list_style(False),'bullets'),('Liste numérotée',lambda:self.list_style(True),'numbers')]:
+            second.addWidget(self.tool_button(self.action(label,fn),icon,text=False))
+        second.addWidget(self.divider())
+        for label, fn, icon in [('Image',self.image,'image'),('Tableau',self.table,'table'),('Lien',self.link,'link')]:
+            second.addWidget(self.tool_button(self.action(label,fn),icon))
+        second.addStretch(); layout.addLayout(first); layout.addLayout(second)
+        ribbon.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Preferred); self.insert_tools.addWidget(ribbon)
 
     def build_chapters(self):
-        self.dock = QDockWidget('Document & chapitres', self); self.dock.setMinimumWidth(220)
-        box = QWidget(); layout = QVBoxLayout(box)
-        label = QLabel('PLUME\nVotre espace d’écriture'); label.setStyleSheet('font-size:18px; font-weight:600; padding:16px 4px;')
-        layout.addWidget(label)
-        self.chapter_list = QListWidget(); self.chapter_list.currentRowChanged.connect(self.switch_chapter); layout.addWidget(self.chapter_list)
-        for label, fn in [('Ajouter un chapitre', self.add_chapter), ('Renommer', self.rename_chapter), ('Monter', lambda:self.move_chapter(-1)), ('Descendre', lambda:self.move_chapter(1)), ('Supprimer', self.delete_chapter)]:
-            button = QPushButton(label); button.clicked.connect(fn); layout.addWidget(button)
-        hint = QLabel('Ctrl+S · enregistrer\nCtrl+F · rechercher\nF11 · concentration'); hint.setStyleSheet('padding:12px 0;'); layout.addWidget(hint)
-        self.dock.setWidget(box); self.addDockWidget(Qt.LeftDockWidgetArea, self.dock)
+        self.dock = QDockWidget('Chapitres', self); self.dock.setObjectName('sidebarDock')
+        self.dock.setFeatures(QDockWidget.NoDockWidgetFeatures); self.dock.setTitleBarWidget(QWidget())
+        self.dock.setMinimumWidth(240); self.dock.setMaximumWidth(290)
+        box = QWidget(); box.setObjectName('sidebar'); layout = QVBoxLayout(box); layout.setContentsMargins(18,24,18,18); layout.setSpacing(14)
+        label = QLabel('Votre document'); label.setObjectName('sidebarTitle'); layout.addWidget(label)
+        caption = QLabel('CHAPITRES'); caption.setObjectName('sectionLabel'); layout.addWidget(caption)
+        self.chapter_list = QListWidget(); self.chapter_list.setObjectName('chapters'); self.chapter_list.currentRowChanged.connect(self.switch_chapter); layout.addWidget(self.chapter_list,1)
+        button = QPushButton('Ajouter un chapitre'); button.setIcon(vector_icon('plus')); button.setProperty('soft',True); button.clicked.connect(self.add_chapter); layout.addWidget(button)
+        controls = QHBoxLayout(); controls.setSpacing(6)
+        rename = QPushButton('Renommer'); rename.clicked.connect(self.rename_chapter); controls.addWidget(rename,1)
+        for label, delta, icon in [('Monter le chapitre',-1,'up'),('Descendre le chapitre',1,'down')]:
+            button = self.tool_button(self.action(label,lambda checked=False,d=delta:self.move_chapter(d)),icon,text=False); controls.addWidget(button)
+        layout.addLayout(controls)
+        delete = QPushButton('Supprimer le chapitre'); delete.setObjectName('deleteChapter'); delete.clicked.connect(self.delete_chapter); layout.addWidget(delete)
+        hint = QLabel('À votre rythme.\n\nCtrl+S  Enregistrer\nCtrl+F  Rechercher\nF11       Concentration'); hint.setObjectName('sidebarHint'); layout.addWidget(hint)
+        self.dock.setWidget(box); self.addDockWidget(Qt.LeftDockWidgetArea,self.dock)
 
     def format(self, **kw):
         fmt = QTextCharFormat()
@@ -188,6 +273,7 @@ class Window(QMainWindow):
         for i, chapter in enumerate(self.chapters):
             if i != self.active:
                 doc = QTextDocument(); doc.setHtml(chapter['html']); total += len(re.findall(r'\S+', doc.toPlainText()))
+        self.breadcrumb.setText('DOCUMENT  /  ' + self.chapters[self.active]['title'])
         self.statusBar().showMessage(f'{current} mots dans ce chapitre · {total} mots au total · ' + ('Modifications non enregistrées' if self.dirty else 'Document enregistré'))
         self.setWindowTitle(f'{"● " if self.dirty else ""}{self.path.name if self.path else "Sans titre"} — Plume')
 
@@ -356,18 +442,60 @@ class Window(QMainWindow):
 
     def toggle_theme(self):
         self.settings.setValue('dark', not self.settings.value('dark', False, type=bool)); self.apply_theme()
+        QTimer.singleShot(0, self.editor.viewport().repaint)
 
     def apply_theme(self):
         dark = self.settings.value('dark', False, type=bool)
-        bg, panel, text, border = ('#20212b','#292b38','#eeeaf7','#454657') if dark else ('#f1eff7','#faf9fd','#343040','#dcd7e8')
-        self.setStyleSheet(f'''QMainWindow,QDialog{{background:{bg};color:{text}}} QWidget{{color:{text}}}
-            QMenuBar,QMenu,QToolBar,QDockWidget,QListWidget{{background:{panel};color:{text};border:0}}
-            QToolBar{{padding:8px;spacing:5px}} QToolButton,QPushButton{{padding:7px 10px;border:1px solid {border};border-radius:6px;background:{panel};color:{text}}}
-            QToolButton:hover,QPushButton:hover{{background:#8071ac;color:white}} QToolButton:checked{{background:#675494;color:white}}
-            QComboBox,QSpinBox,QLineEdit{{padding:5px;background:{panel};color:{text};border:1px solid {border};border-radius:4px}}
-            QListWidget::item{{padding:10px}} QListWidget::item:selected{{background:#675494;color:white}}
-            QTextEdit{{background:#ffffff;color:#222222;border:1px solid {border};selection-background-color:#ded5ef;selection-color:#222}}
-            QStatusBar{{background:{panel};color:{text};padding:4px}}''')
+        bg, panel, text, muted, border, hover, soft = ('#171923','#20232f','#eeeef5','#a8adbf','#35394a','#303549','#343050') if dark else ('#ebeef4','#ffffff','#2a3042','#6d768c','#e1e5ef','#f1f3f9','#efebfa')
+        for action in self.findChildren(QAction):
+            name = action.property('iconName')
+            if name: action.setIcon(vector_icon(name, '#ffffff' if action.property('primaryIcon') else '#ac9ae7' if dark else '#6856b3'))
+        # Explicit Qt palette fixes native popup text on Windows, including fonts.
+        palette = QPalette()
+        for role, value in [(QPalette.Window,panel),(QPalette.WindowText,text),(QPalette.Base,panel),(QPalette.AlternateBase,hover),(QPalette.Text,text),(QPalette.Button,panel),(QPalette.ButtonText,text),(QPalette.Highlight,'#7161bb'),(QPalette.HighlightedText,'#ffffff'),(QPalette.ToolTipBase,panel),(QPalette.ToolTipText,text)]:
+            palette.setColor(role,QColor(value))
+        self.setPalette(palette)
+        for combo in (self.styles,self.fonts):
+            combo.setPalette(palette); combo.view().setPalette(palette)
+        self.setStyleSheet(f'''QMainWindow,QDialog{{background:{bg};color:{text}}}
+            QWidget{{font-family:"Segoe UI","Inter","DejaVu Sans";font-size:13px;color:{text}}}
+            QMenuBar{{background:{panel};padding:5px 14px;border-bottom:1px solid {border}}}
+            QMenuBar::item{{padding:5px 10px;border-radius:5px}} QMenuBar::item:selected{{background:{hover}}}
+            QMenu{{background:{panel};color:{text};border:1px solid {border};padding:6px}}
+            QMenu::item{{padding:8px 22px}} QMenu::item:selected{{background:{soft}}}
+            QToolBar{{background:{panel};border:0;spacing:0;padding:0}}
+            QToolBar#header{{border-bottom:1px solid {border}}} QToolBar#ribbon{{border-bottom:1px solid {border}}}
+            QWidget#headerContent{{background:{panel}}} QWidget#canvas{{background:{bg}}}
+            QLabel#brand{{font-size:25px;font-weight:700;letter-spacing:-1px;padding-right:12px}}
+            QLabel#muted{{color:{muted};font-size:12px}}
+            QLabel#sectionLabel{{font-size:10px;letter-spacing:1px;color:{muted};font-weight:600;padding-right:7px}}
+            QLabel#breadcrumb{{font-size:11px;color:{muted};padding-left:4px}}
+            QWidget#divider{{background:{border};margin:0 0}}
+            QToolButton,QPushButton{{background:transparent;border:1px solid transparent;border-radius:7px;padding:7px 10px;color:{text};min-height:18px}}
+            QToolButton#iconButton{{padding:5px}}
+            QToolButton:hover,QPushButton:hover{{background:{hover};border-color:{border}}}
+            QToolButton:pressed,QPushButton:pressed,QToolButton:checked{{background:{soft};border-color:#b7a9de}}
+            QToolButton[primary="true"]{{background:#7161bb;color:white;padding:8px 14px}}
+            QToolButton[primary="true"]:hover{{background:#6251aa}}
+            QPushButton[soft="true"]{{background:{soft};border:1px solid {border};padding:9px;color:{text}}}
+            QPushButton#deleteChapter{{color:{muted};font-size:11px;text-align:left;padding-left:4px}}
+            QComboBox,QSpinBox,QLineEdit{{background:{panel};color:{text};border:1px solid {border};border-radius:6px;padding:6px;min-height:20px;selection-background-color:#7161bb;selection-color:white}}
+            QComboBox:focus,QSpinBox:focus,QLineEdit:focus{{border-color:#9583d1}}
+            QComboBox QAbstractItemView{{background:{panel};color:{text};border:1px solid {border};selection-background-color:#7161bb;selection-color:white;outline:0}}
+            QComboBox QAbstractItemView::item{{padding:5px;min-height:24px}}
+            QWidget#sidebar{{background:{panel};border-right:1px solid {border}}}
+            QLabel#sidebarTitle{{font-size:17px;font-weight:600;padding-bottom:6px}}
+            QLabel#sidebarHint{{font-size:11px;color:{muted};padding-top:18px;border-top:1px solid {border}}}
+            QListWidget#chapters{{background:transparent;border:0;outline:0;font-size:13px}}
+            QListWidget#chapters::item{{padding:12px 10px;margin-bottom:5px;border-radius:7px;color:{text}}}
+            QListWidget#chapters::item:selected{{background:{soft};color:{text};font-weight:600}}
+            QListWidget#chapters::item:hover{{background:{hover}}}
+            QTextEdit#paper{{font-family:"Calibri","DejaVu Sans";font-size:12pt;background:#ffffff;color:#252938;border:1px solid {'#c6c9d6' if dark else '#dfe3ed'};border-radius:2px;selection-background-color:#ded5ef;selection-color:#222}}
+            QStatusBar{{background:{panel};color:{muted};font-size:11px;border-top:1px solid {border};padding:5px 14px}} QStatusBar::item{{border:0}}
+            QScrollBar:vertical{{background:transparent;width:10px;margin:4px 1px}} QScrollBar::handle:vertical{{background:{border};border-radius:4px;min-height:30px}}
+            QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0}} QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical{{background:none}}
+            QToolTip{{background:{panel};color:{text};border:1px solid {border};padding:6px}}
+        ''')
 
     def closeEvent(self, event):
         if self.confirm_leave(): self.recovery.unlink(missing_ok=True); event.accept()

@@ -2,7 +2,19 @@
 
 Première version pour Windows 10/11 64 bits : courriers, textes, histoires et RP.
 Interface française, fonctionnement local sans compte et sans abonnement.
-Nom provisoire : Plume.
+Nom provisoire : Plume. Version 0.2 — interface modernisée.
+
+## Mettre à jour depuis la version 0.1
+
+Remplacez les fichiers de votre dossier de projet par ceux de cette archive,
+validez les modifications dans Visual Studio Code et synchronisez avec GitHub.
+Téléchargez le nouvel installateur dans Actions après la coche verte.
+Fermez Plume avant de réinstaller au même endroit. Vos fichiers .plume
+restent compatibles et sont conservés.
+
+La version 0.2 apporte une feuille centrée, une barre d’outils avec icônes,
+un panneau de chapitres plus léger, des boutons thème/concentration directs
+et des menus déroulants dont le contraste est corrigé.
 
 ## Ce qui fonctionne
 
